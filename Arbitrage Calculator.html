@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Arbitrage Calculator — Sportsbooks & Prediction Markets</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2230; --border: #2a323d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #2f81f7;
+    --green: #3fb950; --green-bg: rgba(63,185,80,0.12);
+    --red: #f85149; --red-bg: rgba(248,81,73,0.10); --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 32px 16px 80px; }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  header h1 { font-size: 24px; margin: 0 0 4px; }
+  header p { color: var(--muted); margin: 0 0 20px; }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 24px; flex-wrap: wrap; }
+  .tab { background: none; border: none; color: var(--muted); cursor: pointer; padding: 10px 16px; font-size: 15px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .tabpane { display: none; } .tabpane.active { display: block; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+  .controls-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  input, select { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 9px 11px; font-size: 14px; outline: none; }
+  input:focus, select:focus { border-color: var(--accent); }
+  input[type=number] { width: 130px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .legs input.label-input, .legs input.odds-input, .legs select { width: 100%; min-width: 70px; }
+  .legs input.fee-input { width: 70px; }
+  .remove-btn { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 2px 6px; border-radius: 6px; }
+  .remove-btn:hover { color: var(--red); background: var(--red-bg); }
+
+  .btn { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 14px; cursor: pointer; font-size: 14px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-sm { padding: 5px 10px; font-size: 13px; }
+
+  .verdict { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: var(--radius); margin-bottom: 16px; flex-wrap: wrap; }
+  .verdict.arb { background: var(--green-bg); border: 1px solid var(--green); }
+  .verdict.noarb { background: var(--red-bg); border: 1px solid var(--red); }
+  .verdict .big { font-size: 30px; font-weight: 700; }
+  .verdict.arb .big { color: var(--green); } .verdict.noarb .big { color: var(--red); }
+  .headline-stats { display: flex; gap: 28px; margin-left: auto; }
+  .stat .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v.pos { color: var(--green); } .stat .v.neg { color: var(--red); }
+  .big-stat .v { font-size: 32px; line-height: 1.1; }
+  .stats { display: flex; flex-wrap: wrap; gap: 24px; }
+
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .hint { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+  .hint a { color: var(--accent); }
+  .checkbox-field { flex-direction: row; align-items: center; gap: 8px; }
+  .checkbox-field label { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--text); }
+  details { margin-top: 8px; } summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  details p, details li { color: var(--muted); font-size: 13px; }
+  code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  .placeholder-msg { color: var(--muted); text-align: center; padding: 24px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill.open { background: rgba(47,129,247,.15); color: var(--accent); }
+  .pill.settled { background: var(--green-bg); color: var(--green); }
+  .pill.loss { background: var(--red-bg); color: var(--red); }
+  .pill.mkt { background: var(--panel-2); color: var(--muted); }
+  .book-tag { color: var(--muted); font-size: 12px; }
+  .target { color: var(--accent); font-weight: 600; }
+  @keyframes arbflash { from { box-shadow: 0 0 0 0 rgba(63,185,80,.55); } to { box-shadow: 0 0 0 16px rgba(63,185,80,0); } }
+  .verdict.flash { animation: arbflash .6s ease-out; }
+  .row-actions { display: flex; gap: 6px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 32px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Arbitrage Calculator</h1>
+    <p>Separate calculators for sportsbooks &amp; prediction markets · all odds formats · Kalshi fees · profit tracker</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="sport">Sportsbook</button>
+    <button class="tab" data-tab="pred">Prediction Markets</button>
+    <button class="tab" data-tab="tracker">Tracker <span id="tabTradeCount" style="color:var(--muted);font-weight:400"></span></button>
+  </div>
+
+  <!-- ============ SPORTSBOOK ============ -->
+  <section class="tabpane active" id="tab-sport">
+    <div class="card">
+      <div class="controls-row">
+        <div class="field">
+          <label for="sTotal">Total stake</label>
+          <div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--muted)">$</span>
+            <input type="number" id="sTotal" value="1000" min="0" step="any" /></div>
+        </div>
+        <div class="field">
+          <label for="sFeeBasis">Commission charged on</label>
+          <select id="sFeeBasis">
+            <option value="none" selected>No commission (standard books)</option>
+            <option value="winnings">Net winnings (exchange, e.g. Betfair)</option>
+            <option value="payout">Total payout</option>
+          </select>
+        </div>
+        <div class="field checkbox-field">
+          <input type="checkbox" id="sRound" />
+          <label for="sRound">Round stakes to whole $</label>
+        </div>
+      </div>
+      <div class="hint">Enter the best odds for each outcome, each from the book where you'd place it. Per-leg fee % is only for exchanges that take commission — leave 0 for standard sportsbooks.</div>
+    </div>
+
+    <div class="card legs">
+      <table>
+        <thead><tr>
+          <th style="width:24%">Outcome</th><th style="width:20%">Odds format</th>
+          <th style="width:16%">Odds</th><th style="width:10%">Fee %</th>
+          <th class="num" style="width:11%">Implied</th><th class="num" style="width:13%">Stake</th><th style="width:6%"></th>
+        </tr></thead>
+        <tbody id="sLegBody"></tbody>
+      </table>
+      <div class="toolbar"><button class="btn" id="sAdd">+ Add outcome</button><button class="btn" id="sReset">Reset</button></div>
+      <div class="hint">⚡ Type to overwrite · <code>Enter</code> jumps to the next outcome · <code>↑</code>/<code>↓</code> nudge the line (<code>Shift</code> = bigger) · paste several odds to fill every row · <code>Alt+1/2/3</code> switches tabs · <strong>leave one outcome blank to see the odds it needs to arb.</strong></div>
+      <div id="sVerdict" style="margin-top:16px"></div>
+    </div>
+
+    <div class="card">
+      <div id="sTable"></div>
+      <div class="toolbar"><button class="btn btn-primary" id="sLog" disabled>＋ Log this bet to tracker</button></div>
+    </div>
+  </section>
+
+  <!-- ============ PREDICTION MARKETS ============ -->
+  <section class="tabpane" id="tab-pred">
+    <div class="card">
+      <div class="controls-row">
+        <div class="field">
+          <label for="pTotal">Amount to invest</label>
+          <div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--muted)">$</span>
+            <input type="number" id="pTotal" value="1000" min="0" step="any" /></div>
+        </div>
+        <div class="field">
+          <label for="pRate">Kalshi fee coefficient</label>
+          <input type="number" id="pRate" value="0.07" min="0" step="0.005" />
+        </div>
+        <div class="field checkbox-field">
+          <input type="checkbox" id="pRound" checked />
+          <label for="pRound">Whole contracts (exact fees)</label>
+        </div>
+      </div>
+      <div class="hint">Enter each outcome's share <strong>price in cents</strong> (a share pays $1). Choose the platform per leg — Kalshi applies <code>⌈coeff × C × P × (1−P)⌉</code> per order; Polymarket is fee-free. Arb exists when the cost-per-contract across outcomes sums below 100¢.</div>
+    </div>
+
+    <div class="card legs">
+      <table>
+        <thead><tr>
+          <th style="width:22%">Outcome</th><th style="width:18%">Platform</th>
+          <th style="width:13%">Price ¢</th><th class="num" style="width:12%">Fee/ctr</th>
+          <th class="num" style="width:12%">Cost</th><th class="num" style="width:10%">Contracts</th>
+          <th class="num" style="width:11%">Stake</th><th style="width:5%"></th>
+        </tr></thead>
+        <tbody id="pLegBody"></tbody>
+      </table>
+      <div class="toolbar"><button class="btn" id="pAdd">+ Add outcome</button><button class="btn" id="pReset">Reset</button></div>
+      <div class="hint">⚡ Type to overwrite · <code>Enter</code> jumps to the next outcome · <code>↑</code>/<code>↓</code> nudge the price by 1¢ (<code>Shift</code> = 5¢) · paste several prices to fill every row · <code>Alt+1/2/3</code> switches tabs · <strong>leave one outcome blank to see the price it needs to arb.</strong></div>
+      <div id="pVerdict" style="margin-top:16px"></div>
+    </div>
+
+    <div class="card">
+      <div id="pTable"></div>
+      <div class="toolbar"><button class="btn btn-primary" id="pLog" disabled>＋ Log this bet to tracker</button></div>
+    </div>
+  </section>
+
+  <!-- ============ TRACKER ============ -->
+  <section class="tabpane" id="tab-tracker">
+    <div class="card"><div class="stats" id="trackerStats"></div></div>
+    <div class="card">
+      <div id="tradesWrap"><div class="placeholder-msg">No bets logged yet. Build an arb and click “Log this bet”.</div></div>
+      <div class="toolbar"><button class="btn" id="exportCsvBtn">Export CSV</button><button class="btn" id="clearTradesBtn">Clear all</button></div>
+    </div>
+  </section>
+
+  <footer>Runs entirely in your browser — data is stored locally on this device. Educational use; verify odds and limits before betting.</footer>
+</div>
+
+<script>
+/* ===================== shared helpers ===================== */
+const fmtMoney = n => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtPct = n => (n * 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+const esc = s => String(s ?? '').replace(/"/g, '&quot;');
+
+function headlineHTML(isArb, roiVal, profitVal, sumImp, profitWord) {
+  return `<div class="verdict ${isArb ? 'arb' : 'noarb'}">
+    <div class="big">${isArb ? '✓' : '✗'}</div>
+    <div><div style="font-weight:600;font-size:16px">${isArb ? 'Arbitrage opportunity' : 'No arbitrage'}</div>
+      <div style="color:var(--muted);font-size:13px">Total implied ${fmtPct(sumImp)} · margin ${fmtPct(1 - sumImp)}</div></div>
+    <div class="headline-stats">
+      <div class="stat big-stat"><div class="v ${roiVal >= 0 ? 'pos' : 'neg'}">${fmtPct(roiVal)}</div><div class="k">Arbitrage&nbsp;%</div></div>
+      <div class="stat big-stat"><div class="v ${profitVal >= 0 ? 'pos' : 'neg'}">${fmtMoney(profitVal)}</div><div class="k">${profitWord}&nbsp;profit</div></div>
+    </div></div>`;
+}
+
+/* ===================== tabs ===================== */
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.tabpane').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  const pane = document.getElementById('tab-' + t.dataset.tab);
+  pane.classList.add('active');
+  pane.querySelector('.odds-input, .price-input')?.focus();
+}));
+function switchTab(name) { document.querySelector(`.tab[data-tab="${name}"]`).click(); }
+
+/* ===================== SPORTSBOOK ===================== */
+const SPORT_FORMATS = [
+  { v: 'american', label: 'American (+150)' },
+  { v: 'decimal', label: 'Decimal (2.50)' },
+  { v: 'fractional', label: 'Fractional (5/2)' },
+];
+const SPLACEHOLDER = { american: '+150', decimal: '2.50', fractional: '5/2' };
+const sLegBody = document.getElementById('sLegBody');
+let lastSport = null, prevSportArb = false;
+
+function toDecimal(format, raw) {
+  if (raw == null) return null; raw = String(raw).trim(); if (raw === '') return null;
+  if (format === 'decimal') { const d = parseFloat(raw); return (isFinite(d) && d > 1) ? d : null; }
+  if (format === 'american') { const a = parseFloat(raw.replace('+', '')); if (!isFinite(a) || a === 0) return null; return a > 0 ? 1 + a / 100 : 1 + 100 / Math.abs(a); }
+  if (format === 'fractional') { const m = raw.match(/^(\d+(?:\.\d+)?)\s*[\/:]\s*(\d+(?:\.\d+)?)$/); if (m) { const n = parseFloat(m[1]), d = parseFloat(m[2]); return d > 0 ? 1 + n / d : null; } const d = parseFloat(raw); return (isFinite(d) && d > 0) ? 1 + d : null; }
+  return null;
+}
+function effDecimal(dec, feePct, basis) {
+  const c = Math.max(0, (parseFloat(feePct) || 0)) / 100;
+  if (basis === 'none' || c === 0) return dec;
+  if (basis === 'payout') return dec * (1 - c);
+  return 1 + (dec - 1) * (1 - c);
+}
+// invert the fee to recover gross decimal odds from an effective figure
+function grossFromEff(eff, feePct, basis) {
+  const c = Math.max(0, (parseFloat(feePct) || 0)) / 100;
+  if (basis === 'none' || c === 0) return eff;
+  if (basis === 'payout') return eff / (1 - c);
+  return 1 + (eff - 1) / (1 - c);
+}
+// format a decimal-odds figure back into the leg's chosen display format
+function decToFormatStr(dec, fmt) {
+  if (!isFinite(dec) || dec <= 1) return '—';
+  if (fmt === 'decimal') return dec.toFixed(2);
+  if (fmt === 'fractional') return (dec - 1).toFixed(2) + '/1';
+  const a = dec >= 2 ? Math.round((dec - 1) * 100) : Math.round(-100 / (dec - 1));
+  return a > 0 ? '+' + a : '' + a;
+}
+function makeSportLeg(data = {}) {
+  const tr = document.createElement('tr');
+  const fmt = data.format || sLegBody.lastElementChild?.querySelector('.fmt-select')?.value || 'american';
+  tr.innerHTML = `
+    <td><input class="label-input" type="text" placeholder="Outcome ${sLegBody.children.length + 1}" value="${esc(data.label)}"></td>
+    <td><select class="fmt-select">${SPORT_FORMATS.map(f => `<option value="${f.v}" ${f.v === fmt ? 'selected' : ''}>${f.label}</option>`).join('')}</select></td>
+    <td><input class="odds-input" type="text" placeholder="${SPLACEHOLDER[fmt]}" value="${esc(data.odds)}"></td>
+    <td><input class="fee-input" type="number" step="any" min="0" placeholder="0" value="${data.fee ?? ''}"></td>
+    <td class="num implied-cell">—</td><td class="num stake-cell">—</td>
+    <td style="text-align:center"><button class="remove-btn" title="Remove">×</button></td>`;
+  tr.querySelector('.remove-btn').addEventListener('click', () => { tr.remove(); computeSport(); });
+  tr.querySelector('.fmt-select').addEventListener('change', e => { tr.querySelector('.odds-input').placeholder = SPLACEHOLDER[e.target.value]; computeSport(); });
+  tr.querySelectorAll('input, select').forEach(el => el.addEventListener('input', computeSport));
+  sLegBody.appendChild(tr);
+}
+const SPORT_KEY = 'arb_sport_state';
+function saveSport() {
+  const legs = [...sLegBody.children].map(tr => ({ label: tr.querySelector('.label-input').value, format: tr.querySelector('.fmt-select').value, odds: tr.querySelector('.odds-input').value, fee: tr.querySelector('.fee-input').value }));
+  localStorage.setItem(SPORT_KEY, JSON.stringify({ total: document.getElementById('sTotal').value, basis: document.getElementById('sFeeBasis').value, round: document.getElementById('sRound').checked, legs }));
+}
+function computeSport() {
+  const total = parseFloat(document.getElementById('sTotal').value) || 0;
+  const basis = document.getElementById('sFeeBasis').value;
+  const round = document.getElementById('sRound').checked;
+  const rows = [...sLegBody.children].map(tr => {
+    const format = tr.querySelector('.fmt-select').value;
+    const oddsStr = tr.querySelector('.odds-input').value;
+    const dec = toDecimal(format, oddsStr);
+    const feeRaw = tr.querySelector('.fee-input').value;
+    const label = tr.querySelector('.label-input').value || tr.querySelector('.label-input').placeholder;
+    return { tr, format, label, odds: oddsStr, feeRaw, dec, eff: dec == null ? null : effDecimal(dec, feeRaw, basis) };
+  });
+  rows.forEach(r => {
+    r.tr.querySelector('.implied-cell').textContent = r.eff ? fmtPct(1 / r.eff) : '—';
+    r.tr.querySelector('.implied-cell').classList.remove('target');
+    r.tr.querySelector('.stake-cell').textContent = '—';
+    r.tr.querySelector('.odds-input').placeholder = SPLACEHOLDER[r.format];
+  });
+  saveSport();
+  const valid = rows.filter(r => r.eff != null);
+
+  // break-even target: one outcome left blank → show the odds it needs to arb
+  const blanks = rows.filter(r => String(r.odds).trim() === '');
+  if (blanks.length === 1 && valid.length >= 1) {
+    const sumOthers = valid.reduce((s, r) => s + 1 / r.eff, 0);
+    const b = blanks[0], cell = b.tr.querySelector('.implied-cell');
+    if (sumOthers < 1) {
+      const disp = decToFormatStr(grossFromEff(1 / (1 - sumOthers), b.feeRaw, basis), b.format);
+      cell.textContent = '≥ ' + disp; cell.classList.add('target');
+      b.tr.querySelector('.odds-input').placeholder = disp + ' to arb';
+    } else { cell.textContent = 'no room'; cell.classList.add('target'); }
+  }
+
+  const V = document.getElementById('sVerdict'), T = document.getElementById('sTable'), L = document.getElementById('sLog');
+  if (valid.length < 2) { V.innerHTML = '<div class="placeholder-msg">Enter valid odds for at least two outcomes.</div>'; T.innerHTML = ''; L.disabled = true; lastSport = null; prevSportArb = false; return; }
+  const sumImp = valid.reduce((s, r) => s + 1 / r.eff, 0);
+  const isArb = sumImp < 1;
+  valid.forEach(r => { r.stake = total * (1 / r.eff) / sumImp; if (round) r.stake = Math.round(r.stake); });
+  const invested = valid.reduce((s, r) => s + r.stake, 0);
+  valid.forEach(r => { r.ret = r.stake * r.eff; r.profit = r.ret - invested; });
+  const worst = Math.min(...valid.map(r => r.profit));
+  const roiActual = invested > 0 ? worst / invested : 0;
+
+  V.innerHTML = headlineHTML(isArb, roiActual, worst, sumImp, round ? 'Worst-case' : 'Guaranteed');
+  if (isArb && !prevSportArb) V.querySelector('.verdict')?.classList.add('flash');
+  prevSportArb = isArb;
+  valid.forEach(r => { r.tr.querySelector('.stake-cell').textContent = fmtMoney(r.stake); });
+  T.innerHTML = `<table><thead><tr><th>If this wins</th><th class="num">Dec odds</th><th class="num">Stake</th><th class="num">Return</th><th class="num">Profit</th><th class="num">ROI</th></tr></thead><tbody>
+    ${valid.map(r => `<tr><td>${esc(r.label)}</td><td class="num">${r.eff.toFixed(3)}</td><td class="num">${fmtMoney(r.stake)}</td><td class="num">${fmtMoney(r.ret)}</td><td class="num" style="color:${r.profit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtMoney(r.profit)}</td><td class="num">${fmtPct(invested > 0 ? r.profit / invested : 0)}</td></tr>`).join('')}
+    </tbody><tfoot><tr style="font-weight:600"><td>Total invested</td><td></td><td class="num">${fmtMoney(invested)}</td><td colspan="3" class="num" style="color:var(--muted)">${round ? 'profit varies by outcome' : 'same profit on every outcome'}</td></tr></tfoot></table>`;
+  L.disabled = false;
+  lastSport = { market: 'sportsbook', legs: valid.map(r => ({ label: r.label, detail: r.odds })), invested, expProfit: worst, roi: roiActual };
+}
+document.getElementById('sAdd').addEventListener('click', () => { makeSportLeg(); computeSport(); });
+['sTotal', 'sFeeBasis', 'sRound'].forEach(id => document.getElementById(id).addEventListener('input', computeSport));
+document.getElementById('sFeeBasis').addEventListener('change', computeSport);
+document.getElementById('sReset').addEventListener('click', () => { localStorage.removeItem(SPORT_KEY); document.getElementById('sTotal').value = 1000; document.getElementById('sFeeBasis').value = 'none'; document.getElementById('sRound').checked = false; sLegBody.innerHTML = ''; seedSport(); computeSport(); });
+function seedSport() { makeSportLeg({ format: 'american', odds: '+105', label: 'Team A' }); makeSportLeg({ format: 'american', odds: '+110', label: 'Team B' }); }
+function initSport() {
+  let st = null; try { st = JSON.parse(localStorage.getItem(SPORT_KEY)); } catch {}
+  if (st && Array.isArray(st.legs) && st.legs.length) {
+    document.getElementById('sTotal').value = st.total ?? 1000;
+    document.getElementById('sFeeBasis').value = st.basis ?? 'none';
+    document.getElementById('sRound').checked = !!st.round;
+    st.legs.forEach(l => makeSportLeg(l));
+  } else seedSport();
+  computeSport();
+}
+
+/* ===================== PREDICTION MARKETS ===================== */
+const PLATFORMS = [{ v: 'kalshi', label: 'Kalshi' }, { v: 'polymarket', label: 'Polymarket' }, { v: 'none', label: 'No fee' }];
+const pLegBody = document.getElementById('pLegBody');
+let lastPred = null, prevPredArb = false;
+// recover share price (in dollars) from a target cost-per-contract, given fee rate r:
+// cost = P + r·P·(1−P)  ⇒  r·P² − (1+r)·P + cost = 0
+function priceFromCost(cost, r) {
+  if (cost <= 0 || cost >= 1) return null;
+  if (r === 0) return cost;
+  const disc = (1 + r) * (1 + r) - 4 * r * cost;
+  if (disc < 0) return null;
+  return ((1 + r) - Math.sqrt(disc)) / (2 * r);
+}
+
+function makePredLeg(data = {}) {
+  const tr = document.createElement('tr');
+  const plat = data.platform || pLegBody.lastElementChild?.querySelector('.plat-select')?.value || 'kalshi';
+  tr.innerHTML = `
+    <td><input class="label-input" type="text" placeholder="Outcome ${pLegBody.children.length + 1}" value="${esc(data.label)}"></td>
+    <td><select class="plat-select">${PLATFORMS.map(p => `<option value="${p.v}" ${p.v === plat ? 'selected' : ''}>${p.label}</option>`).join('')}</select></td>
+    <td><input class="odds-input price-input" type="number" step="any" min="0" max="100" placeholder="60" value="${esc(data.price)}"></td>
+    <td class="num fee-cell">—</td><td class="num cost-cell">—</td><td class="num ctr-cell">—</td><td class="num stake-cell">—</td>
+    <td style="text-align:center"><button class="remove-btn" title="Remove">×</button></td>`;
+  tr.querySelector('.remove-btn').addEventListener('click', () => { tr.remove(); computePred(); });
+  tr.querySelectorAll('input, select').forEach(el => el.addEventListener('input', computePred));
+  pLegBody.appendChild(tr);
+}
+const PRED_KEY = 'arb_pred_state';
+function savePred() {
+  const legs = [...pLegBody.children].map(tr => ({ label: tr.querySelector('.label-input').value, platform: tr.querySelector('.plat-select').value, price: tr.querySelector('.price-input').value }));
+  localStorage.setItem(PRED_KEY, JSON.stringify({ total: document.getElementById('pTotal').value, rate: document.getElementById('pRate').value, round: document.getElementById('pRound').checked, legs }));
+}
+function computePred() {
+  const total = parseFloat(document.getElementById('pTotal').value) || 0;
+  const rate = Math.max(0, parseFloat(document.getElementById('pRate').value) || 0);
+  const round = document.getElementById('pRound').checked;
+  const rows = [...pLegBody.children].map(tr => {
+    const platform = tr.querySelector('.plat-select').value;
+    const cents = parseFloat(tr.querySelector('.price-input').value);
+    const P = (isFinite(cents) && cents > 0 && cents < 100) ? cents / 100 : null;
+    const r = platform === 'kalshi' ? rate : 0;
+    const feeCtr = P == null ? null : r * P * (1 - P);          // continuous fee per contract ($)
+    const cost = P == null ? null : P + feeCtr;                  // cost per contract incl fee
+    const label = tr.querySelector('.label-input').value || tr.querySelector('.label-input').placeholder;
+    return { tr, platform, label, raw: tr.querySelector('.price-input').value, cents, P, r, feeCtr, cost };
+  });
+  rows.forEach(r => {
+    r.tr.querySelector('.fee-cell').textContent = r.feeCtr == null ? '—' : (r.feeCtr * 100).toFixed(2) + '¢';
+    r.tr.querySelector('.cost-cell').textContent = r.cost == null ? '—' : fmtPct(r.cost);
+    r.tr.querySelector('.cost-cell').classList.remove('target');
+    r.tr.querySelector('.ctr-cell').textContent = '—'; r.tr.querySelector('.stake-cell').textContent = '—';
+    r.tr.querySelector('.price-input').placeholder = '60';
+  });
+  savePred();
+  const valid = rows.filter(r => r.P != null);
+
+  // break-even target: one outcome left blank → show the price it needs to arb
+  const blanks = rows.filter(r => String(r.raw).trim() === '');
+  if (blanks.length === 1 && valid.length >= 1) {
+    const sumOthers = valid.reduce((s, r) => s + r.cost, 0);
+    const b = blanks[0], cell = b.tr.querySelector('.cost-cell');
+    const tp = sumOthers < 1 ? priceFromCost(1 - sumOthers, b.r) : null;
+    if (tp != null) {
+      const cents = (tp * 100).toFixed(1).replace(/\.0$/, '');
+      cell.textContent = '≤ ' + cents + '¢'; cell.classList.add('target');
+      b.tr.querySelector('.price-input').placeholder = cents + '¢ to arb';
+    } else { cell.textContent = 'no room'; cell.classList.add('target'); }
+  }
+
+  const V = document.getElementById('pVerdict'), T = document.getElementById('pTable'), L = document.getElementById('pLog');
+  if (valid.length < 2) { V.innerHTML = '<div class="placeholder-msg">Enter prices (in ¢) for at least two outcomes.</div>'; T.innerHTML = ''; L.disabled = true; lastPred = null; prevPredArb = false; return; }
+  const sumCost = valid.reduce((s, r) => s + r.cost, 0);
+  const isArb = sumCost < 1;
+
+  // equal contracts on every outcome → equal $1 payout whichever wins
+  let C = total / sumCost;
+  if (round) C = Math.floor(C);
+  valid.forEach(r => {
+    r.contracts = C;
+    const base = C * r.P;
+    const fee = r.r > 0 ? (round ? Math.ceil(r.r * C * r.P * (1 - r.P) * 100) / 100 : r.r * C * r.P * (1 - r.P)) : 0;
+    r.stake = base + fee;
+  });
+  const invested = valid.reduce((s, r) => s + r.stake, 0);
+  const payout = C;                 // exactly one outcome wins, paying $1 per contract
+  const profit = payout - invested; // identical regardless of which outcome wins
+  const roiActual = invested > 0 ? profit / invested : 0;
+
+  V.innerHTML = headlineHTML(isArb, roiActual, profit, sumCost, 'Guaranteed');
+  if (isArb && !prevPredArb) V.querySelector('.verdict')?.classList.add('flash');
+  prevPredArb = isArb;
+  valid.forEach(r => {
+    r.tr.querySelector('.ctr-cell').textContent = round ? r.contracts.toLocaleString() : r.contracts.toFixed(1);
+    r.tr.querySelector('.stake-cell').textContent = fmtMoney(r.stake);
+  });
+  T.innerHTML = `<table><thead><tr><th>If this wins</th><th>Platform</th><th class="num">Price</th><th class="num">Cost/ctr</th><th class="num">Contracts</th><th class="num">Stake</th></tr></thead><tbody>
+    ${valid.map(r => `<tr><td>${esc(r.label)}</td><td class="book-tag">${r.platform}</td><td class="num">${r.cents}¢</td><td class="num">${fmtMoney(r.cost)}</td><td class="num">${round ? r.contracts.toLocaleString() : r.contracts.toFixed(1)}</td><td class="num">${fmtMoney(r.stake)}</td></tr>`).join('')}
+    </tbody><tfoot><tr style="font-weight:600"><td>Total invested</td><td></td><td></td><td></td><td class="num" style="color:var(--muted)">payout ${fmtMoney(payout)}</td><td class="num">${fmtMoney(invested)}</td></tr></tfoot></table>`;
+  L.disabled = false;
+  lastPred = { market: 'prediction', legs: valid.map(r => ({ label: r.label, detail: `${r.cents}¢ ${r.platform}` })), invested, expProfit: profit, roi: roiActual };
+}
+document.getElementById('pAdd').addEventListener('click', () => { makePredLeg(); computePred(); });
+['pTotal', 'pRate', 'pRound'].forEach(id => document.getElementById(id).addEventListener('input', computePred));
+document.getElementById('pReset').addEventListener('click', () => { localStorage.removeItem(PRED_KEY); document.getElementById('pTotal').value = 1000; document.getElementById('pRate').value = 0.07; document.getElementById('pRound').checked = true; pLegBody.innerHTML = ''; seedPred(); computePred(); });
+function seedPred() { makePredLeg({ platform: 'kalshi', price: '48', label: 'Yes' }); makePredLeg({ platform: 'kalshi', price: '49', label: 'No' }); }
+function initPred() {
+  let st = null; try { st = JSON.parse(localStorage.getItem(PRED_KEY)); } catch {}
+  if (st && Array.isArray(st.legs) && st.legs.length) {
+    document.getElementById('pTotal').value = st.total ?? 1000;
+    document.getElementById('pRate').value = st.rate ?? 0.07;
+    document.getElementById('pRound').checked = st.round !== false;
+    st.legs.forEach(l => makePredLeg(l));
+  } else seedPred();
+  computePred();
+}
+
+/* ===================== TRACKER ===================== */
+const TRADES_KEY = 'arb_trades';
+const loadTrades = () => { try { return JSON.parse(localStorage.getItem(TRADES_KEY)) || []; } catch { return []; } };
+const saveTrades = t => localStorage.setItem(TRADES_KEY, JSON.stringify(t));
+
+function logResult(res) {
+  if (!res) return;
+  const desc = prompt('Label for this bet:', res.legs.map(l => l.label).join(' / '));
+  if (desc === null) return;
+  const trades = loadTrades();
+  trades.unshift({ id: Date.now(), date: new Date().toISOString(), label: desc || 'Untitled bet', market: res.market, legs: res.legs, invested: res.invested, expProfit: res.expProfit, roi: res.roi, status: 'open', actualPnl: null });
+  saveTrades(trades); renderTracker(); switchTab('tracker');
+}
+document.getElementById('sLog').addEventListener('click', () => logResult(lastSport));
+document.getElementById('pLog').addEventListener('click', () => logResult(lastPred));
+
+function settleTrade(id) { const t = loadTrades(); const x = t.find(y => y.id === id); if (!x) return; const inp = prompt(`Actual profit/loss for "${x.label}" (negative for a loss).\nArb bets normally realize the expected amount:`, x.expProfit.toFixed(2)); if (inp === null) return; const v = parseFloat(inp); if (!isFinite(v)) return; x.status = 'settled'; x.actualPnl = v; saveTrades(t); renderTracker(); }
+function reopenTrade(id) { const t = loadTrades(); const x = t.find(y => y.id === id); if (x) { x.status = 'open'; x.actualPnl = null; saveTrades(t); renderTracker(); } }
+function deleteTrade(id) { if (!confirm('Delete this bet?')) return; saveTrades(loadTrades().filter(x => x.id !== id)); renderTracker(); }
+window.settleTrade = settleTrade; window.reopenTrade = reopenTrade; window.deleteTrade = deleteTrade;
+
+function renderTracker() {
+  const trades = loadTrades();
+  document.getElementById('tabTradeCount').textContent = trades.length ? `(${trades.length})` : '';
+  const settled = trades.filter(t => t.status === 'settled'), open = trades.filter(t => t.status === 'open');
+  const realized = settled.reduce((s, t) => s + (t.actualPnl || 0), 0);
+  const settledStake = settled.reduce((s, t) => s + t.invested, 0);
+  const openStake = open.reduce((s, t) => s + t.invested, 0);
+  const openExp = open.reduce((s, t) => s + t.expProfit, 0);
+  const allStaked = trades.reduce((s, t) => s + t.invested, 0);
+  document.getElementById('trackerStats').innerHTML = `
+    <div class="stat"><div class="v ${realized >= 0 ? 'pos' : 'neg'}">${fmtMoney(realized)}</div><div class="k">Realized profit</div></div>
+    <div class="stat"><div class="v">${settledStake > 0 ? fmtPct(realized / settledStake) : '—'}</div><div class="k">Realized ROI</div></div>
+    <div class="stat"><div class="v pos">${fmtMoney(openExp)}</div><div class="k">Expected (open)</div></div>
+    <div class="stat"><div class="v">${fmtMoney(openStake)}</div><div class="k">Open exposure</div></div>
+    <div class="stat"><div class="v">${trades.length}</div><div class="k">Bets · ${fmtMoney(allStaked)} staked</div></div>`;
+  const wrap = document.getElementById('tradesWrap');
+  if (!trades.length) { wrap.innerHTML = '<div class="placeholder-msg">No bets logged yet. Build an arb and click “Log this bet”.</div>'; return; }
+  wrap.innerHTML = `<table><thead><tr><th>Date</th><th>Bet</th><th class="num">Staked</th><th class="num">Exp. profit</th><th class="num">Actual P/L</th><th>Status</th><th></th></tr></thead><tbody>
+    ${trades.map(t => {
+      const d = new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const pnl = t.status === 'settled' ? t.actualPnl : null;
+      const pill = t.status === 'settled' ? (pnl >= 0 ? '<span class="pill settled">settled</span>' : '<span class="pill loss">loss</span>') : '<span class="pill open">open</span>';
+      const mkt = t.market === 'prediction' ? 'Prediction' : 'Sportsbook';
+      return `<tr>
+        <td class="book-tag">${d}</td>
+        <td>${esc(t.label)} <span class="pill mkt">${mkt}</span><div class="book-tag">${t.legs.map(l => esc(l.label) + (l.detail ? ' (' + esc(l.detail) + ')' : '')).join(' · ')}</div></td>
+        <td class="num">${fmtMoney(t.invested)}</td>
+        <td class="num" style="color:var(--green)">${fmtMoney(t.expProfit)}</td>
+        <td class="num" style="color:${pnl == null ? 'var(--muted)' : (pnl >= 0 ? 'var(--green)' : 'var(--red)')}">${pnl == null ? '—' : fmtMoney(pnl)}</td>
+        <td>${pill}</td>
+        <td><div class="row-actions">${t.status === 'open' ? `<button class="btn btn-sm" onclick="settleTrade(${t.id})">Settle</button>` : `<button class="btn btn-sm" onclick="reopenTrade(${t.id})">Reopen</button>`}
+          <button class="remove-btn" title="Delete" onclick="deleteTrade(${t.id})">×</button></div></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+document.getElementById('clearTradesBtn').addEventListener('click', () => { if (confirm('Delete ALL logged bets? This cannot be undone.')) { saveTrades([]); renderTracker(); } });
+document.getElementById('exportCsvBtn').addEventListener('click', () => {
+  const trades = loadTrades(); if (!trades.length) return;
+  const rows = [['Date', 'Market', 'Label', 'Outcomes', 'Staked', 'Expected profit', 'Status', 'Actual P/L', 'ROI %']];
+  trades.forEach(t => rows.push([new Date(t.date).toISOString(), t.market, t.label, t.legs.map(l => l.label + (l.detail ? ' ' + l.detail : '')).join(' | '), t.invested.toFixed(2), t.expProfit.toFixed(2), t.status, t.actualPnl == null ? '' : t.actualPnl.toFixed(2), (t.roi * 100).toFixed(2)]));
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `arb-trades-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+});
+
+/* ===================== fast entry ===================== */
+// click a field → select its contents so you can just type over it
+document.addEventListener('focusin', e => {
+  if (e.target.matches('input.odds-input, input.price-input, input.fee-input, input.label-input')) { try { e.target.select(); } catch {} }
+});
+
+function wireFastEntry(legBody, oddsSel, addLeg, recompute, sanitize, nudge) {
+  legBody.addEventListener('keydown', e => {
+    if (!e.target.matches(oddsSel)) return;
+    // Enter → jump to next outcome's odds field (create a row if at the end)
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const rows = [...legBody.children];
+      let next = rows[rows.indexOf(e.target.closest('tr')) + 1];
+      if (!next) { addLeg(); recompute(); next = legBody.lastElementChild; }
+      const f = next.querySelector(oddsSel); if (f) { f.focus(); f.select?.(); }
+      return;
+    }
+    // ↑/↓ → nudge the line (Shift = bigger step)
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      nudge(e.target, e.key === 'ArrowUp' ? 1 : -1, e.shiftKey ? 5 : 1);
+      recompute(); e.target.select?.();
+    }
+  });
+  // paste several values at once → fill consecutive rows
+  legBody.addEventListener('paste', e => {
+    if (!e.target.matches(oddsSel)) return;
+    const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+    const tokens = text.split(/[\s,;|]+/).map(sanitize).filter(Boolean);
+    if (tokens.length < 2) return; // single value → let the normal paste happen
+    e.preventDefault();
+    let rows = [...legBody.children];
+    const start = rows.indexOf(e.target.closest('tr'));
+    tokens.forEach((tok, i) => {
+      let tr = rows[start + i];
+      if (!tr) { addLeg(); rows = [...legBody.children]; tr = rows[start + i]; }
+      tr.querySelector(oddsSel).value = tok;
+    });
+    recompute();
+  });
+}
+function nudgeSport(input, dir, mult) {
+  const fmt = input.closest('tr').querySelector('.fmt-select').value;
+  let v = parseFloat(String(input.value).replace('+', ''));
+  if (fmt === 'american') {
+    if (!isFinite(v)) v = dir > 0 ? 100 : -100;
+    let nv = Math.round(v + dir * 5 * mult);
+    if (nv > -100 && nv < 100) nv = dir > 0 ? 100 : -100; // skip the invalid −99…+99 gap
+    input.value = nv > 0 ? '+' + nv : '' + nv;
+  } else if (fmt === 'decimal') {
+    if (!isFinite(v)) v = 2;
+    input.value = Math.max(1.01, v + dir * 0.05 * mult).toFixed(2);
+  } // fractional: no nudge
+}
+function nudgePred(input, dir, mult) {
+  let v = parseFloat(input.value); if (!isFinite(v)) v = 50;
+  input.value = Math.round(Math.min(99, Math.max(1, v + dir * mult)));
+}
+wireFastEntry(sLegBody, '.odds-input', () => makeSportLeg(), computeSport, t => t.replace(/[^\d.+\-/]/g, ''), nudgeSport);
+wireFastEntry(pLegBody, '.price-input', () => makePredLeg(), computePred, t => t.replace(/[^\d.]/g, ''), nudgePred);
+
+// Alt+1 / Alt+2 / Alt+3 → switch tabs (Alt avoids clashing with typing digits)
+document.addEventListener('keydown', e => {
+  if (!e.altKey || e.metaKey || e.ctrlKey) return;
+  const map = { Digit1: 'sport', Digit2: 'pred', Digit3: 'tracker' };
+  if (map[e.code]) { e.preventDefault(); switchTab(map[e.code]); }
+});
+
+/* ===================== init ===================== */
+initSport(); initPred(); renderTracker();
+document.querySelector('#tab-sport .odds-input')?.focus();
+</script>
+</body>
+</html>
