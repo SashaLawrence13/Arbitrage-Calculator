@@ -1,0 +1,51 @@
+COHORT
+  kalshi      met the inclusion rules: 349579   price lookup done: 349579
+  polymarket  met the inclusion rules: 70251   price lookup done: 70251
+  dropped, kalshi: bid/ask gap over 10c: 89050
+  dropped, kalshi: no two-sided quote at bet time: 26826
+  dropped, price under 2c or over 98c: 7292
+  kalshi      analysed: 229564 markets in 52238 events
+  polymarket  analysed: 67098 markets in 27437 events
+
+TEST 1: back heavy favourites (YES at 85c+ -> buy YES; YES at 15c or less -> buy NO)
+  ALL (main result)                  bets  79258  events 29368  won  88.8%  staked $ 74477.20  profit $-4063.20  return  -5.46%  (95% range -5.76% to -5.15%)
+  kalshi                             bets  71954  events 25217  won  89.1%  staked $ 67706.88  profit $-3598.88  return  -5.32%  (95% range -5.63% to -4.99%)
+  polymarket                         bets   7304  events  4151  won  86.3%  staked $  6770.31  profit $ -464.31  return  -6.86%  (95% range -8.04% to -5.61%)
+  sports only                        bets  68067  events 24262  won  88.5%  staked $ 63900.70  profit $-3661.70  return  -5.73%  (95% range -6.07% to -5.38%)
+  kalshi sports                      bets  65041  events 22478  won  88.7%  staked $ 61121.71  profit $-3451.71  return  -5.65%  (95% range -5.99% to -5.31%)
+  polymarket sports                  bets   3026  events  1784  won  84.9%  staked $  2778.98  profit $ -209.98  return  -7.56%  (95% range -9.50% to -5.72%)
+  everything except sports           bets  11191  events  5106  won  90.9%  staked $ 10576.50  profit $ -401.50  return  -3.80%  (95% range -4.59% to -3.03%)
+
+TEST 2: the model (train on oldest 70%, test on newest 30%)
+  train 207663 markets, test 88999 markets
+  coefficients [intercept, log-odds, polymarket, polymarket x log-odds]: [0.029, 0.87, -0.118, -0.028] (log-odds above 1 means favourites are underpriced)
+  log loss  model 0.55926   market price 0.56289   -> model better
+  model picks (edge 3c+ after fees)  bets    526  events   526  won  26.8%  staked $   120.21  profit $   20.79  return +17.30%  (95% range +1.30% to +33.47%)
+    of which sports                  bets    403  events   403  won  24.8%  staked $    93.04  profit $    6.96  return  +7.48%  (95% range -10.20% to +26.31%)
+    of which not sports              bets    123  events   123  won  33.3%  staked $    27.17  profit $   13.83  return +50.93%  (95% range +13.65% to +91.19%)
+
+FOR DESCRIPTION: how often YES happened, by price band
+  kalshi
+     2- 5c  markets  13262  average price   3.5c  YES happened   4.9%
+     5-10c  markets  25011  average price   7.1c  YES happened  10.5%
+    10-15c  markets  18308  average price  12.2c  YES happened  15.8%
+    15-25c  markets  31746  average price  19.6c  YES happened  23.6%
+    25-40c  markets  40801  average price  32.1c  YES happened  34.8%
+    40-60c  markets  51344  average price  49.3c  YES happened  49.4%
+    60-75c  markets  22085  average price  66.7c  YES happened  64.9%
+    75-85c  markets  12094  average price  79.7c  YES happened  76.7%
+    85-90c  markets   5381  average price  87.2c  YES happened  84.6%
+    90-95c  markets   6193  average price  92.5c  YES happened  90.4%
+    95-98c  markets   3339  average price  96.2c  YES happened  95.1%
+  polymarket
+     2- 5c  markets   1296  average price   3.4c  YES happened   9.2%
+     5-10c  markets   2382  average price   7.2c  YES happened  12.5%
+    10-15c  markets   2146  average price  12.4c  YES happened  16.5%
+    15-25c  markets   5727  average price  20.2c  YES happened  25.3%
+    25-40c  markets  11562  average price  32.4c  YES happened  31.9%
+    40-60c  markets  36930  average price  49.6c  YES happened  47.6%
+    60-75c  markets   4181  average price  66.4c  YES happened  63.9%
+    75-85c  markets   1631  average price  79.4c  YES happened  73.8%
+    85-90c  markets    538  average price  87.2c  YES happened  82.5%
+    90-95c  markets    465  average price  92.4c  YES happened  84.5%
+    95-98c  markets    240  average price  96.5c  YES happened  94.6%

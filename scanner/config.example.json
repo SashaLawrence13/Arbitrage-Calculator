@@ -1,0 +1,26 @@
+{
+  "data_dir": "~/arb-scanner/data",
+  "poll_seconds": 60,
+  "pm_max_events": 100000,
+  "bankroll_per_arb": 200,
+  "min_profit": 1.0,
+  "min_roi": 0.01,
+  "max_roi": 0.15,
+  "max_days": 120,
+  "max_legs": 12,
+  "keep_days": 7,
+  "verify_per_sweep": 25,
+  "alerts_enabled": true,
+  "ntfy_server": "https://ntfy.sh",
+  "ntfy_topic": "",
+  "odds_api_key": "",
+  "odds_hours": 12,
+  "odds_sports": [
+    "americanfootball_nfl",
+    "americanfootball_ncaaf",
+    "basketball_nba",
+    "basketball_ncaab",
+    "icehockey_nhl"
+  ],
+  "port": 8787
+}

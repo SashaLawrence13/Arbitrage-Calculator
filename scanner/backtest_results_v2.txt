@@ -1,0 +1,30 @@
+COHORT (Kalshi, 1-in-4 sample, no volume filter)
+  met the inclusion rules: 177035   price lookup done: 177035
+  dropped, no two-sided quote at bet time: 50708
+  dropped, bid/ask gap over 10c: 44062
+  dropped, price under 2c or over 98c: 1534
+  dropped, open interest under 100 at bet time: 61554
+  analysed: 19177 markets in 12333 events
+
+TEST A: frozen version 1 model [0.029, 0.87, -0.118, -0.028] on markets opened after its training period
+  markets available: 7124
+  frozen model picks (MAIN RESULT)   no bets
+    of which sports                  no bets
+    of which not sports              no bets
+  log loss on those markets: model 0.50855   market price 0.50726
+
+TEST B: back heavy favourites (all analysed markets)
+  favourites                         bets   6649  events  5189  won  92.7%  staked $  6260.57  profit $  -94.57  return  -1.51%  (95% range -2.19% to -0.83%)
+
+FOR DESCRIPTION: how often YES happened, by price band
+     2- 5c  markets   1534  average price   3.3c  YES happened   3.3%
+     5-10c  markets   2094  average price   7.2c  YES happened   7.5%
+    10-15c  markets   1453  average price  12.3c  YES happened  11.7%
+    15-25c  markets   2277  average price  19.5c  YES happened  20.2%
+    25-40c  markets   2927  average price  32.5c  YES happened  33.5%
+    40-60c  markets   4758  average price  49.6c  YES happened  48.9%
+    60-75c  markets   1759  average price  66.5c  YES happened  65.4%
+    75-85c  markets    823  average price  79.8c  YES happened  79.0%
+    85-90c  markets    441  average price  87.3c  YES happened  85.0%
+    90-95c  markets    597  average price  92.6c  YES happened  94.8%
+    95-98c  markets    514  average price  96.5c  YES happened  98.8%
