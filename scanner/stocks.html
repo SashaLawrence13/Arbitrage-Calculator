@@ -235,7 +235,14 @@ async function study(cik, result) {
       const upd = () => { const n = t.value.trim().length; c.textContent = n + " characters" + (n < s.min_chars ? " (needs " + s.min_chars + ")" : ""); c.className = n < s.min_chars ? "dim" : "dim pass"; };
       t.addEventListener("input", upd); upd();
       w.append(el("div", "", q.text));
-      if (finds[q.key]) { const fb = el("div", "found"); fb.append(el("div", "dim", "What the filings show:")); const ul = el("ul"); finds[q.key].forEach(x => ul.append(el("li", "", x))); fb.append(ul); w.append(fb); }
+      const gd = (s.guide || {})[q.key] || { shows: finds[q.key] || [], look: [] };
+      if (gd.shows.length || gd.look.length) {
+        const fb = el("div", "found");
+        if (gd.shows.length) { fb.append(el("div", "dim", "What the numbers show:")); const ul = el("ul"); gd.shows.forEach(x => ul.append(el("li", "", x))); fb.append(ul); }
+        if (gd.look.length) { fb.append(el("div", "dim", "Where to find the rest:")); const ul = el("ul");
+          gd.look.forEach(x => { const li = el("li", "", x.text + " "); if (x.url && /^https:\/\/www\.sec\.gov\//.test(x.url)) { const a = el("a", "", "Open"); a.href = x.url; a.target = "_blank"; a.rel = "noopener"; li.append(a); } ul.append(li); }); fb.append(ul); }
+        w.append(fb);
+      }
       w.append(t, c); box.append(w);
     });
   });

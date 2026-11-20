@@ -281,6 +281,150 @@ def report_link(db, cik):
     return url
 
 
+def implied_growth(cap, base):
+    """The yearly growth in owner earnings, for ten years, that today's price assumes
+    (10%% required return, 2.5%% afterwards). Solved by bisection."""
+    def value(g):
+        pv, cash = 0.0, base
+        for t in range(1, 11):
+            cash *= 1 + g
+            pv += cash / (1 + metrics.DISCOUNT) ** t
+        return pv + cash * (1 + metrics.TERMINAL_GROWTH) / (metrics.DISCOUNT - metrics.TERMINAL_GROWTH) / (1 + metrics.DISCOUNT) ** 10
+    lo, hi = -0.20, 0.60
+    if value(lo) > cap or value(hi) < cap:
+        return None
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if value(mid) < cap else (lo, mid)
+    return (lo + hi) / 2
+
+
+def worst_fall(db, ticker):
+    """Largest fall from a high in the last ten years of monthly prices (cached a week)."""
+    key = "fall:%s" % ticker
+    r = db.execute("SELECT v FROM u.settings WHERE k=?", (key,)).fetchone()
+    if r and time.time() - json.loads(r[0]).get("ts", 0) < 7 * 86400:
+        return json.loads(r[0])
+    out = {"ts": int(time.time())}
+    try:
+        d = data.get("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=10y&interval=1mo" % ticker.replace(".", "-"),
+                     ua="Mozilla/5.0", tries=2)
+        res = d["chart"]["result"][0]
+        px = [(t, c) for t, c in zip(res["timestamp"], res["indicators"]["adjclose"][0]["adjclose"]) if c]
+        peak, worst = px[0], (0.0, px[0], px[0])
+        for t, c in px:
+            if c > peak[1]:
+                peak = (t, c)
+            if c / peak[1] - 1 < worst[0]:
+                worst = (c / peak[1] - 1, peak, (t, c))
+        out.update(fall_pct=round(-100 * worst[0]), high=time.strftime("%B %Y", time.gmtime(worst[1][0])),
+                   low=time.strftime("%B %Y", time.gmtime(worst[2][0])))
+    except Exception:
+        pass
+    db.execute("INSERT OR REPLACE INTO u.settings VALUES(?,?)", (key, json.dumps(out)))
+    db.commit()
+    return out
+
+
+def guide(db, a, dg, report_url):
+    """Help for every written question: what the numbers say, and where in the filings the
+    rest is found. Evidence and directions, never the answer itself."""
+    G = {k: {"shows": list((dg or {}).get("findings", {}).get(k, [])), "look": []} for k in WRITTEN_KEYS}
+    cik, su, v = a["cik"], a.get("summary") or {}, a.get("value") or {}
+    yrs, cap = a["years"], a.get("market_cap")
+    money = lambda x: "$%.1fB" % (x / 1e9) if abs(x) >= 1e9 else "$%.0fM" % (x / 1e6)
+    proxy = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=%d&type=DEF+14A&dateb=&owner=include&count=10" % cik
+    rows = {r["label"]: r["values"] for r in (dg or {}).get("rows", [])}
+    dyears = (dg or {}).get("years", [])
+
+    def shows(k, t):
+        G[k]["shows"].append(t)
+
+    def look(k, t, url=None):
+        G[k]["look"].append({"text": t, "url": url})
+
+    # Circle of competence
+    if a.get("industry"):
+        shows("business", "The SEC files it under: %s." % a["industry"])
+    look("business", "Annual report, Item 1 (Business), first few pages: what it sells, to whom, its segments, and whether any single customer is a large share of sales.", report_url)
+    look("economics", "Annual report, Item 7 (Management's Discussion): the paragraphs explaining why sales and costs changed from last year.", report_url)
+    look("ten_years", "Annual report, Item 1: how it describes its market and growth plans. Then ask what would have to change for people to stop buying this.", report_url)
+    oes = [y["owner_earnings"] for y in yrs[-3:] if y["owner_earnings"] is not None]
+    oe = sum(oes) / len(oes) if oes else None
+    debts = [y["debt"] for y in yrs if y["debt"] is not None]
+    if cap and oe and oe > 0:
+        shows("whole_business", "At today's price the whole company costs %s%s. It has produced about %s a year for its owners (three-year average): %.1f%% a year on that price%s." % (
+            money(cap), " plus %s of long-term debt that comes with it" % money(debts[-1]) if debts else "", money(oe), 100 * oe / cap,
+            ", against %.2f%% on a 10-year Treasury" % v["treasury_pct"] if v.get("treasury_pct") else ""))
+    elif cap:
+        shows("whole_business", "At today's price the whole company costs %s, and its owner earnings over the last three years were not positive." % money(cap))
+    # Moat
+    rocs = [y["roc_pct"] for y in yrs if y["roc_pct"] is not None]
+    if rocs:
+        shows("moat", "It earned 12%% or more on its capital in %d of %d years (lowest %.1f%%, highest %.1f%%). A real moat usually shows up as high returns that last a decade; one or two good years do not show it." % (
+            sum(1 for r in rocs if r >= 12), len(rocs), min(rocs), max(rocs)))
+    gp, sales = rows.get("Gross profit"), rows.get("Sales")
+    if gp and sales:
+        gms = [100 * g / s_ for g, s_ in zip(gp, sales) if g is not None and s_]
+        if gms:
+            shows("moat", "Gross margin stayed between %.0f%% and %.0f%%. A narrow, high band suggests customers are not choosing on price." % (min(gms), max(gms)))
+    look("moat", "Annual report, Item 1, the paragraph headed Competition: who it names as rivals and what it says it competes on (price, brand, service, technology).", report_url)
+    look("pricing", "Item 7: look for the words 'price' and 'volume'. Did sales rise because it charged more or sold more?", report_url)
+    look("moat_trend", "Compare this year's Item 1 and Item 1A with the report from five years ago. New rivals or new risks that were not there before are the signal.", report_url)
+    # Management
+    look("managers", "Proxy statement (form DEF 14A): 'Security Ownership' shows how much stock the managers and directors hold; 'Summary Compensation Table' shows what they are paid and in what form.", proxy)
+    look("capital", "Item 7, 'Liquidity and Capital Resources': what management says it plans to do with cash. Compare with what it actually did above.", report_url)
+    gw = rows.get("Goodwill")
+    if gw:
+        for i in range(1, len(gw)):
+            if gw[i - 1] and gw[i] is not None and gw[i] < 0.85 * gw[i - 1]:
+                shows("candor", "Goodwill fell from %s to %s in fiscal %d. That usually means it sold a business or admitted it overpaid for one. See what management said about it that year." % (money(gw[i - 1]), money(gw[i]), dyears[i]))
+    look("candor", "The chairman's or CEO's letter at the front of the annual report to shareholders (on the company's investor site), and Item 7. Search for 'impairment', 'restructuring', 'disappointing', 'below our expectations'. Candid managers explain bad news in plain words and in the first person.", report_url)
+    # Financial strength
+    look("survive", "Item 7, 'Liquidity': when its debt comes due and what borrowing it can still draw on.", report_url)
+    look("real_profit", "The cash flow statement, and the note on revenue recognition, in Item 8.", report_url)
+    look("capital_light", "Item 7 and the cash flow statement: planned capital spending for next year, and how much of past spending was to maintain versus to grow.", report_url)
+    look("inflation", "Item 7 for the years 2021 to 2023: how it described rising costs then, and whether it passed them on.", report_url)
+    # Price
+    if cap and oe and oe > 0:
+        g = implied_growth(cap, oe)
+        if g is not None:
+            shows("valuation", "Today's price only makes sense, at a 10%% required return, if owner earnings grow about %.1f%% a year for the next ten years.%s" % (
+                100 * g, " Its profit grew %.1f%% a year over the last decade." % su["growth_pct"] if su.get("growth_pct") is not None else ""))
+            shows("other_side", "A buyer at this price is counting on roughly %.1f%% yearly growth for a decade. The person selling to you may think that is too much to ask. What do you know that says otherwise?" % (100 * g))
+        for label, sc in (v.get("scenarios") or {}).items():
+            shows("valuation", "With owner earnings growing %.1f%% a year (%s), the estimate is $%.2f a share." % (sc["growth_pct"], label, sc["value_per_share"]))
+    if v.get("owner_earnings_yield_pct") is not None:
+        shows("vs_alternatives", "Its owner earnings are %.1f%% of today's price%s." % (
+            v["owner_earnings_yield_pct"], ", against %.2f%% a year, guaranteed, on a 10-year Treasury" % v["treasury_pct"] if v.get("treasury_pct") else ""))
+    others = []
+    for ocik, in db.execute("SELECT cik FROM u.thesis WHERE status='understood' AND cik != ?", (cik,)):
+        o = metrics.analyze(db, ocik, treasury(db)) or {}
+        oy = (o.get("value") or {}).get("owner_earnings_yield_pct")
+        if oy is not None:
+            others.append((oy, o["ticker"]))
+    if others:
+        shows("vs_alternatives", "Companies you have already cleared, by owner earnings on today's price: " + ", ".join("%s %.1f%%" % (t, y) for y, t in sorted(others, reverse=True)[:5]) + ".")
+    # How it goes wrong
+    flagged = [c["name"] + " (" + (c["value"] or "") + ")" for c in a["checks"] if c["pass"] is False]
+    if flagged:
+        shows("risks", "Checks it fails today: " + "; ".join(flagged) + ".")
+    for t in G["survive"]["shows"] + G["real_profit"]["shows"]:
+        if "lost money in" in t or "Stock pay is" in t:
+            shows("risks", t)
+    for f in a.get("flags", []):
+        shows("risks", f)
+    if not G["risks"]["shows"]:
+        shows("risks", "Nothing in ten years of numbers stands out as a danger sign. For a company like this the risks are in the business itself (customers, competitors, regulation, technology), which the numbers show only after the damage is done.")
+    look("risks", "Annual report, Item 1A (Risk Factors). Companies list them roughly in order of importance; the first five matter most. Also Item 3 (Legal Proceedings).", report_url)
+    shows("sell", "After you buy, the program watches these for you and raises them on the portfolio page: a check newly failing, a loss year, negative owner earnings, return on capital or margin well under its average, debt passing five years of profit, and the price reaching 1.5 times your own value. Your answer should name the business facts that are not on this list: what would show the moat is gone.")
+    w = worst_fall(db, a["ticker"]) if a.get("ticker") else {}
+    if w.get("fall_pct"):
+        shows("drop", "In the last ten years its price has fallen as much as %d%% from a high (%s to %s). It will happen again at some point; the question is what you will do." % (w["fall_pct"], w["high"], w["low"]))
+    look("other_side", "Look for what the bears say: the first risk factors in Item 1A, and any recent drop in margins or growth in the table above.", report_url)
+    return G
+
+
 def treasury(db):
     t = db.execute("SELECT v FROM meta WHERE k='treasury10'").fetchone()
     return json.loads(t[0]) if t else None
@@ -297,8 +441,14 @@ def get(db, cik):
     if row:
         saved = {"status": row[0], "answers": json.loads(row[1] or "{}"), "quiz": json.loads(row[2] or "{}"),
                  "quiz_score": row[3], "my_value": row[4], "buy_below": row[5], "read_report": row[6], "updated": row[7]}
+    from . import digest
+    url = report_link(db, cik)
+    try:
+        dg = digest.get(db, cik)
+    except Exception:
+        dg = None
     return {"cik": cik, "name": a["name"], "ticker": a["ticker"], "price": a["price"],
-            "report_url": report_link(db, cik), "min_chars": MIN_CHARS,
+            "report_url": url, "min_chars": MIN_CHARS, "guide": guide(db, a, dg, url),
             "written": [{"section": s, "questions": [{"key": k, "text": t} for k, t in qs]} for s, qs in WRITTEN],
             "quiz": [{"key": q["key"], "text": q["text"]} for q in quiz_for(a)], "saved": saved}
 

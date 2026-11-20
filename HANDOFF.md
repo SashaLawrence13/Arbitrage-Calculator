@@ -35,7 +35,7 @@ Dashboard http://127.0.0.1:8787/ , stocks `/stocks`, portfolio `/portfolio`.
 ## Open items
 
 1. Annual-report text (business description, risk factors) and Berkshire's own holdings need `www.sec.gov`, which refuses requests without a declared contact address. Waiting on the owner's yes or no to sending a contact email in the request header. Do not disguise the request as a browser.
-2. The owner wants the app to help answer all 20 ownership questions. The digest covers the numeric ones; the rest need item 1.
+2. All 20 ownership questions now show help (`study.guide`): what the numbers show, plus where in the filings to find the rest. Pulling the report text itself still needs item 1.
 3. Odds key for the sportsbook side (owner's action).
 4. This repository is public. Whether to make it private is the owner's call.
 
