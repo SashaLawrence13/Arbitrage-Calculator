@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio</title>
+<style>
+  :root { --bg:#0e1116; --card:#161b22; --line:#262d38; --text:#e6edf3; --dim:#8b96a5;
+          --green:#3fb950; --red:#f85149; --amber:#d29922; --blue:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; padding:16px; }
+  h1 { font-size:18px; margin:0; }
+  h2 { font-size:13px; margin:0 0 10px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  a { color:var(--blue); text-decoration:none; }
+  main { padding:0 16px 40px; max-width:1200px; display:grid; gap:16px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .dim { color:var(--dim); font-size:12px; } .warn { color:var(--amber); margin:4px 0; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+  .stat b { display:block; font-size:20px; font-variant-numeric:tabular-nums; } .stat span { color:var(--dim); font-size:12px; }
+  .scroll { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  th, td { text-align:right; padding:6px 8px; border-top:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--dim); font-weight:600; font-size:12px; border-top:0; } td.l, th.l { text-align:left; }
+  .pass { color:var(--green); } .fail { color:var(--red); }
+  input { background:#0e1116; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; width:130px; }
+  button { background:#21262d; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 10px; font:inherit; cursor:pointer; }
+  ul { margin:6px 0 0 18px; padding:0; } li { margin:4px 0; }
+  .empty { color:var(--dim); }
+  .rev { border-top:1px solid var(--line); padding:12px 0; } .rev:first-child { border-top:0; }
+  .rev h3 { margin:0 0 4px; font-size:15px; } .weak { color:var(--red); } .pricey, .reread { color:var(--amber); } .hold { color:var(--green); }
+  blockquote { margin:6px 0; padding:6px 10px; border-left:3px solid var(--line); color:var(--dim); white-space:pre-wrap; }
+  select, textarea { background:#0e1116; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; }
+  textarea { width:100%; min-height:64px; margin:6px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Portfolio</h1>
+  <a href="/stocks">Value screen</a>
+  <a href="/">Arb scanner</a>
+</header>
+<main>
+  <section>
+    <div class="warn">A record and a set of checks, not advice. The program never places an order and does not tell you what to buy or sell.</div>
+    <div class="dim">It is run the way Berkshire describes running its own: a few businesses you understand, bought below what you think they are worth, judged by the earnings they produce for you and not by the stock price. Only companies that passed the ownership questions can be added.</div>
+  </section>
+  <section><h2>Where it stands</h2><div class="stats" id="stats"></div>
+    <div style="margin-top:12px"><label class="dim">Cash you are holding ($) <input id="cash"></label> <button id="saveCash">Save</button></div></section>
+  <section><h2>Are you beating an index fund?</h2>
+    <div class="dim" style="margin-bottom:8px">Every purchase you record is matched with the same dollars put into the S&P 500 fund on the same day. Dividends count on both sides. Shares you sold stay in the record at the price you got, so the result cannot be flattered by dropping losers.</div>
+    <div id="vs"></div></section>
+  <section><h2>Things to look at</h2><div id="notes"></div></section>
+  <section><h2>Hold or sell: a review of each holding</h2>
+    <div class="dim" style="margin-bottom:8px">Berkshire's letters give four reasons to sell: the business got worse, the original judgement was wrong, the price went far above any sensible value, or the money has a clearly better use. A price move alone is none of them, for winners or losers. Each holding is checked against the business facts saved when you wrote your case, and against your own value. The program raises the points. You decide, and you write down why.</div>
+    <div id="reviews"></div></section>
+  <section><h2>Holdings</h2><div class="scroll"><table>
+    <thead><tr><th class="l">Company</th><th>Shares</th><th>Avg cost</th><th>Price</th><th>Value</th><th>Share of portfolio</th><th>Gain</th><th>Your value</th><th>Your share of its owner earnings</th><th>Checks</th><th>Case written</th><th></th></tr></thead>
+    <tbody id="rows"></tbody></table></div><div id="noHold" class="empty"></div></section>
+  <section><h2>Companies you have cleared (your watch list)</h2>
+    <div class="dim" style="margin-bottom:8px">"At your price" means today's price is at or below the buy-below price you wrote down yourself.</div>
+    <div class="scroll"><table><thead><tr><th class="l">Company</th><th>Price</th><th>Your value</th><th>You would buy below</th><th class="l">Today</th><th class="l">Owned</th></tr></thead><tbody id="watch"></tbody></table></div>
+    <div id="noWatch" class="empty"></div><div class="dim" id="piles" style="margin-top:8px"></div></section>
+  <section><h2>Decision journal</h2><div class="dim" style="margin-bottom:8px">Every hold, add and sell you recorded, with the reason you gave at the time. Reread it before the next decision.</div><div id="journal"></div></section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+const usd = (n, d) => n == null ? "–" : "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: d ?? 0, maximumFractionDigits: d ?? 0 });
+const post = async (path, body) => (await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+const stat = (label, value) => { const d = el("div", "stat"); d.append(el("b", "", value), el("span", "", label)); return d; };
+
+async function load() {
+  const p = await (await fetch("/api/portfolio")).json();
+  $("cash").value = p.cash;
+  const n = p.positions.length, top = p.positions[0];
+  $("stats").replaceChildren(
+    stat("Total (stocks plus cash)", usd(p.total)), stat("In stocks", usd(p.invested)), stat("Cash", usd(p.cash)),
+    stat("Companies owned", n), stat("Largest holding", top ? top.ticker + " " + top.weight_pct + "%" : "–"),
+    stat("Your share of owner earnings, per year", usd(p.lookthrough_owner_earnings)),
+    stat("That as a return on what the stocks cost today", p.lookthrough_yield_pct == null ? "–" : p.lookthrough_yield_pct + "%"),
+    stat("10-year Treasury, for comparison", p.treasury ? p.treasury.pct + "%" : "–"));
+  const vs = $("vs"); vs.replaceChildren();
+  const b = p.vs_index;
+  if (!b) vs.append(el("div", "empty", "Nothing to compare yet."));
+  else if (b.error) vs.append(el("div", "warn", b.error));
+  else {
+    const g = el("div", "stats");
+    g.append(stat("You put in", usd(b.paid)), stat("Your stocks, with dividends", usd(b.yours) + "  (" + (b.your_return_pct >= 0 ? "+" : "") + b.your_return_pct + "%)"),
+      stat("Same money in the " + b.index_name, usd(b.index) + "  (" + (b.index_return_pct >= 0 ? "+" : "") + b.index_return_pct + "%)"),
+      stat(b.ahead >= 0 ? "Ahead of the index by" : "Behind the index by", usd(Math.abs(b.ahead))));
+    g.lastChild.firstChild.className = b.ahead >= 0 ? "pass" : "fail"; vs.append(g);
+    if (b.caution) vs.append(el("div", "warn", b.caution));
+    const t = el("table"), tb = el("tbody"); t.style.marginTop = "10px";
+    t.append(Object.assign(el("thead"), { innerHTML: "<tr><th class='l'>Company</th><th>Put in</th><th>Yours</th><th>Index</th><th>Ahead or behind</th><th class='l'>Status</th></tr>" }));
+    b.by_company.forEach(c => { const tr = el("tr"), d = c.yours - c.index; tr.append(el("td", "l", c.ticker), el("td", "", usd(c.paid)), el("td", "", usd(c.yours)), el("td", "", usd(c.index)), el("td", d >= 0 ? "pass" : "fail", (d >= 0 ? "+" : "-") + usd(Math.abs(d))), el("td", "l", c.open ? "Held" : "Sold")); tb.append(tr); });
+    t.append(tb); vs.append(t);
+  }
+  const notes = $("notes"); notes.replaceChildren();
+  if (!p.notes.length) notes.append(el("div", "empty", n ? "Nothing flagged." : "No holdings yet. Open a company on the value screen, answer the ownership questions, then record what you bought."));
+  else { const ul = el("ul"); p.notes.forEach(t => ul.append(el("li", "", t))); notes.append(ul); }
+  const body = $("rows"); body.replaceChildren();
+  p.positions.forEach(h => {
+    const tr = el("tr"), avg = h.paid / h.shares, gain = h.value == null ? null : h.value - h.paid;
+    const link = el("a", "", h.ticker + "  " + h.name); link.href = "/stocks#" + h.cik;
+    const c0 = el("td", "l"); c0.append(link);
+    const g = el("td", gain == null ? "" : gain >= 0 ? "pass" : "fail", gain == null ? "–" : usd(gain) + " (" + (100 * gain / h.paid).toFixed(0) + "%)");
+    const del = el("button", "", "Remove"); del.onclick = async () => { if (confirm("Remove every recorded purchase of " + h.ticker + " from this record?")) { for (const l of h.lots) await post("/api/holding/delete", { id: l.id }); load(); } };
+    const c11 = el("td"); c11.append(del);
+    tr.append(c0, el("td", "", h.shares.toLocaleString()), el("td", "", usd(avg, 2)), el("td", "", usd(h.price, 2)), el("td", "", usd(h.value)),
+      el("td", "", h.weight_pct == null ? "–" : h.weight_pct + "%"), g, el("td", "", usd(h.my_value, 2)), el("td", "", usd(h.lookthrough_owner_earnings)),
+      el("td", "", h.score == null ? "–" : h.score + " / " + h.of), el("td", "", h.thesis_age_days == null ? "–" : h.thesis_age_days + " days ago"), c11);
+    body.append(tr);
+  });
+  $("noHold").textContent = n ? "" : "Empty.";
+  const rv = $("reviews"); rv.replaceChildren();
+  if (!n) rv.append(el("div", "empty", "Nothing to review yet."));
+  p.positions.forEach(h => {
+    const r = h.review; if (!r) return;
+    const box = el("div", "rev");
+    box.append(el("h3", "", h.ticker + "  " + h.name), el("div", r.kind, r.verdict + (r.change_pct == null ? "" : "   (" + (r.change_pct >= 0 ? "up " : "down ") + Math.abs(r.change_pct) + "% on what you paid)")));
+    if (r.weakened.length) { const ul = el("ul"); r.weakened.forEach(t => ul.append(el("li", "", t))); box.append(ul); }
+    r.notes.forEach(t => box.append(el("div", "dim", t)));
+    if (r.your_sell_rule) { box.append(el("div", "dim", "What you said would make you sell, written before you owned it:")); box.append(el("blockquote", "", r.your_sell_rule)); }
+    if (r.change_pct != null && r.change_pct <= -25 && r.your_drop_rule) { box.append(el("div", "dim", "What you said you would do if the price fell with the business unchanged:")); box.append(el("blockquote", "", r.your_drop_rule)); }
+    const act = el("select"), why = el("select"), txt = el("textarea"), go = el("button", "", "Record decision"), msg = el("div", "dim");
+    const sp = el("input"), ss = el("input"); sp.placeholder = "Sale price per share"; ss.placeholder = "Shares sold"; sp.style.marginLeft = ss.style.marginLeft = "8px"; sp.style.display = ss.style.display = "none";
+    act.onchange = () => { sp.style.display = (act.value === "sold" || act.value === "trimmed") ? "" : "none"; ss.style.display = act.value === "trimmed" ? "" : "none"; };
+    [["hold", "I am holding"], ["added", "I bought more"], ["trimmed", "I sold part"], ["sold", "I sold all of it"]].forEach(([v, t]) => { const o = el("option", "", t); o.value = v; act.append(o); });
+    p.reasons.forEach(x => { const o = el("option", "", x.label); o.value = x.key; why.append(o); });
+    why.style.marginLeft = "8px"; txt.placeholder = "Why, in your own words (60 characters minimum). You will reread this.";
+    go.onclick = async () => {
+      if (act.value === "sold" && !confirm("Record that you sold all of " + h.ticker + "? It leaves the holdings list but stays in the index comparison.")) return;
+      const res = await post("/api/decision", { cik: h.cik, action: act.value, reason_kind: why.value, reason: txt.value, verdict: r.verdict, sale_price: sp.value, shares_sold: ss.value });
+      if (res.error) { msg.textContent = res.error; msg.className = "fail"; return; }
+      if (res.warning) alert(res.warning);
+      load();
+    };
+    box.append(act, why, sp, ss, txt, go, msg); rv.append(box);
+  });
+  const jr = $("journal"); jr.replaceChildren();
+  if (!p.journal.length) jr.append(el("div", "empty", "No decisions recorded yet."));
+  p.journal.forEach(j => {
+    const d = el("div", "rev");
+    d.append(el("div", "", new Date(j.ts * 1000).toLocaleDateString() + "   " + j.ticker + "   " + j.action + (j.price ? " at $" + j.price.toFixed(2) : "") + "   ·   " + j.reason_label));
+    if (!j.sound) d.append(el("div", "pricey", "A price move on its own is not one of Berkshire's reasons."));
+    d.append(el("blockquote", "", j.reason)); if (j.verdict) d.append(el("div", "dim", "The review said: " + j.verdict));
+    jr.append(d);
+  });
+  const w = $("watch"); w.replaceChildren();
+  p.watch.forEach(x => {
+    const tr = el("tr"), link = el("a", "", x.ticker + "  " + x.name); link.href = "/stocks#" + x.cik;
+    const c0 = el("td", "l"); c0.append(link);
+    tr.append(c0, el("td", "", usd(x.price, 2)), el("td", "", usd(x.my_value, 2)), el("td", "", usd(x.buy_below, 2)),
+      el("td", "l " + (x.at_or_below ? "pass" : ""), x.at_or_below ? "At your price" : "Above your price"), el("td", "l", x.owned ? "Yes" : "No"));
+    w.append(tr);
+  });
+  $("noWatch").textContent = p.watch.length ? "" : "None yet.";
+  $("piles").textContent = "Studying: " + (p.piles.studying || 0) + "   ·   Too-hard pile: " + (p.piles["too hard"] || 0) + "   ·   Cleared: " + (p.piles.understood || 0);
+}
+$("saveCash").onclick = async () => { await post("/api/cash", { cash: $("cash").value || 0 }); load(); };
+load();
+</script>
+</body>
+</html>

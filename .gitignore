@@ -1,0 +1,10 @@
+# secrets and personal data never go in this public repo
+scanner/config.json
+*.db
+*.db-wal
+*.db-shm
+*.pkl
+*.log
+*.pid
+__pycache__/
+.DS_Store

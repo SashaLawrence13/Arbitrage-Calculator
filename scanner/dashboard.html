@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arb Scanner</title>
+<style>
+  :root { --bg:#0e1116; --card:#161b22; --line:#262d38; --text:#e6edf3; --dim:#8b96a5;
+          --green:#3fb950; --red:#f85149; --amber:#d29922; --blue:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; padding:16px; }
+  h1 { font-size:18px; margin:0; }
+  h2 { font-size:14px; margin:0 0 10px; color:var(--dim); font-weight:600;
+       text-transform:uppercase; letter-spacing:.04em; }
+  a { color:var(--blue); text-decoration:none; }
+  main { padding:0 16px 40px; display:grid; gap:16px; max-width:1100px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+  .stat b { display:block; font-size:19px; font-variant-numeric:tabular-nums; }
+  .stat span, .dim { color:var(--dim); font-size:12px; }
+  .opp { border-top:1px solid var(--line); padding:10px 0; }
+  .opp:first-of-type { border-top:0; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; }
+  .money { color:var(--green); font-weight:600; font-variant-numeric:tabular-nums; }
+  .tag { font-size:11px; padding:1px 7px; border-radius:99px; border:1px solid var(--line); color:var(--dim); }
+  .warn { color:var(--amber); font-size:12px; margin-top:4px; }
+  .leg { font-size:13px; margin-top:3px; overflow-wrap:anywhere; }
+  .pair { border-top:1px solid var(--line); padding:10px 0; }
+  .pair:first-of-type { border-top:0; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:640px) { .cols { grid-template-columns:1fr; } }
+  details { margin-top:4px; } summary { cursor:pointer; color:var(--dim); font-size:12px; }
+  .rules { font-size:12px; color:var(--dim); white-space:pre-wrap; max-height:220px; overflow:auto; }
+  input { background:#0e1116; color:var(--text); border:1px solid var(--line); border-radius:6px;
+          padding:5px 8px; font:inherit; }
+  label { color:var(--dim); font-size:12px; margin-right:10px; }
+  button { background:#21262d; color:var(--text); border:1px solid var(--line); border-radius:6px;
+           padding:5px 10px; font:inherit; cursor:pointer; margin:6px 6px 0 0; }
+  button:hover { border-color:var(--dim); }
+  .empty { color:var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Arb Scanner</h1>
+  <span class="dim" id="updated">loading…</span>
+  <a href="/calculator" target="_blank">Open the calculator</a>
+  <a href="/stocks">Value screen (stocks)</a>
+</header>
+<main>
+  <section><h2>Status</h2><div class="stats" id="stats"></div></section>
+  <section><h2>Live opportunities (re-priced from the order book)</h2><div id="opps"></div></section>
+  <section><h2>Bonus bet converter (sportsbook bonus, hedged on Kalshi or Polymarket)</h2>
+    <div class="dim" style="margin-bottom:8px">For a bonus bet where the stake is not returned. Put the bonus on an outcome at the sportsbook, buy the opposite side here, and the result is the same whoever wins. Longer odds convert better. Check that both sites settle the bet the same way (overtime, ties, postponements).</div>
+    <div class="row" style="justify-content:flex-start">
+      <label>Bonus amount $ <input id="bAmt" value="100" size="6" inputmode="decimal"></label>
+      <label>Sportsbook odds on your pick <input id="bOdds" value="+300" size="7"></label>
+      <label>Team or player <input id="bQ" placeholder="e.g. georgia tech" size="22"></label>
+      <button id="bGo">Find hedge</button>
+    </div>
+    <div id="hedges" style="margin-top:8px"></div></section>
+  <section><h2>Sportsbook plays</h2><div id="plays"></div></section>
+  <section><h2>Matches to review (Kalshi vs Polymarket)</h2>
+    <div class="dim" style="margin-bottom:8px">Read both sets of rules. Confirm only if both sites settle the same way in every case. Use "Opposite" when YES on one site means NO on the other.</div>
+    <div id="pairs"></div></section>
+  <section><h2>Model (paper only)</h2><div id="model"></div></section>
+  <section><h2>Recently closed opportunities</h2><div id="past"></div></section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text; return e; };
+const usd = n => "$" + Number(n || 0).toFixed(2);
+const ago = ts => { const s = Math.max(0, Date.now()/1000 - ts);
+  return s < 90 ? Math.round(s) + "s ago" : s < 5400 ? Math.round(s/60) + " min ago" : Math.round(s/3600) + " h ago"; };
+const KIND = { single:"Same market", no_set:"NO set", yes_set:"YES set (check coverage)", cross:"Cross-site" };
+const safeUrl = u => /^https:\/\/(kalshi\.com|polymarket\.com)\//.test(u || "") ? u : null;
+
+function stat(label, value) { const d = el("div", "stat"); d.append(el("b", "", value), el("span", "", label)); return d; }
+
+function oppNode(o) {
+  const d = el("div", "opp"), top = el("div", "row"), left = el("div");
+  left.append(el("span", "tag", KIND[o.kind] || o.kind), document.createTextNode(" " + o.title));
+  const right = el("div", "money", usd(o.profit) + "  (" + (o.roi*100).toFixed(1) + "%)");
+  top.append(left, right); d.append(top);
+  d.append(el("div", "dim", o.contracts + " contracts each, cost " + usd(o.cost) +
+    (o.days == null ? "" : ", settles in ~" + Math.round(o.days) + " days") + ", seen " + ago(o.last_ts)));
+  for (const l of o.legs) {
+    const row = el("div", "leg");
+    row.append(document.createTextNode("Buy " + l.side.toUpperCase() + " at " + (l.price*100).toFixed(1) + "¢ on " +
+      (l.platform === "kalshi" ? "Kalshi" : "Polymarket") + (l.size ? " (" + Math.floor(l.size) + " available): " : ": ")));
+    const u = safeUrl(l.url);
+    if (u) { const a = el("a", "", l.label); a.href = u; a.target = "_blank"; a.rel = "noopener"; row.append(a); }
+    else row.append(document.createTextNode(l.label));
+    d.append(row);
+  }
+  if (o.note) d.append(el("div", "warn", o.note));
+  return d;
+}
+
+function side(text, rules, url, name) {
+  const d = el("div"); d.append(el("div", "dim", name));
+  const u = safeUrl(url);
+  if (u) { const a = el("a", "", text); a.href = u; a.target = "_blank"; a.rel = "noopener"; d.append(a); }
+  else d.append(el("div", "", text));
+  const det = el("details"); det.append(el("summary", "", "Rules"), el("div", "rules", rules || "(no rule text in the feed; open the market page)"));
+  d.append(det); return d;
+}
+
+async function setPair(id, status, inverted) {
+  await fetch("/api/pair", { method:"POST", headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ id, status, inverted }) });
+  load();
+}
+
+function pairNode(p) {
+  const d = el("div", "pair"), cols = el("div", "cols");
+  cols.append(side(p.a_text, p.a_rules, p.a_url, "Kalshi"), side(p.b_text, p.b_rules, p.b_url, "Polymarket"));
+  d.append(cols);
+  const b1 = el("button", "", "Same question"), b2 = el("button", "", "Opposite"), b3 = el("button", "", "Not a match");
+  b1.onclick = () => setPair(p.id, "confirmed", false);
+  b2.onclick = () => setPair(p.id, "confirmed", true);
+  b3.onclick = () => setPair(p.id, "rejected", false);
+  d.append(b1, b2, b3, el("span", "dim", " similarity " + p.score));
+  return d;
+}
+
+function fill(node, items, make, empty) {
+  node.replaceChildren();
+  if (!items.length) node.append(el("div", "empty", empty));
+  else items.forEach(i => node.append(make(i)));
+}
+
+async function load() {
+  let s;
+  try { s = await (await fetch("/api/state")).json(); }
+  catch (e) { $("updated").textContent = "scanner not reachable"; return; }
+  const st = s.status || {};
+  $("updated").textContent = st.ts ? "last sweep " + ago(st.ts) + " (" + st.sweep_seconds + "s)" : "first sweep running…";
+  $("stats").replaceChildren(
+    stat("Kalshi markets", (st.kalshi_markets || 0).toLocaleString()),
+    stat("Polymarket markets", (st.poly_markets || 0).toLocaleString()),
+    stat("Price changes saved", (s.counts.quotes || 0).toLocaleString()),
+    stat("Markets resolved", (s.counts.resolved || 0).toLocaleString()),
+    stat("Candidates last sweep", st.candidates || 0),
+    stat("Survived re-pricing", st.verified || 0),
+    stat("Confirmed pairs", s.confirmed_pairs || 0));
+  fill($("opps"), s.opps, oppNode, "Nothing live right now. That is the normal state; real arbs are rare and short.");
+  fill($("pairs"), s.pairs, pairNode, "No matches waiting for review.");
+  fill($("past"), s.past, oppNode, "None yet.");
+  renderPlays(s.plays || {});
+  const m = s.model, box = $("model"); box.replaceChildren();
+  if (!m) box.append(el("div", "empty", "The model has not run yet."));
+  else {
+    box.append(el("div", "", "Retired 2026-11-20. With the volume filter removed, Kalshi prices matched outcomes almost exactly and the model found nothing to bet on. Its earlier profit came from how the first test picked its markets. The few paper bets below are left to settle for the record."));
+    const g = el("div", "stats"); g.style.marginTop = "10px";
+    g.append(stat("Training markets", m.n_train), stat("Test markets (need " + s.min_test + ")", m.n_test));
+    if (m.ll_model != null) g.append(stat("Model log loss", m.ll_model.toFixed(4)), stat("Market log loss", m.ll_market.toFixed(4)));
+    const p = s.paper;
+    g.append(stat("Paper picks", p.n || 0), stat("Settled", p.settled || 0), stat("Won", p.won || 0),
+             stat("Paper profit", usd(p.pnl)));
+    box.append(g);
+    box.append(el("div", "dim", "Paper only. No real money is placed by this program."));
+  }
+}
+function playRow(text, right, sub) {
+  const d = el("div", "opp"), top = el("div", "row");
+  top.append(el("div", "", text), el("div", "money", right)); d.append(top);
+  if (sub) d.append(el("div", "dim", sub)); return d;
+}
+function renderPlays(p) {
+  const box = $("plays"); box.replaceChildren();
+  if (!p.has_key) { box.append(el("div", "empty", "Off. Add a free key from the-odds-api.com as odds_api_key in scanner/config.json and restart the scanner. Until then, use the bonus bet converter above with odds you type in.")); return; }
+  if (!p.lines_ts) { box.append(el("div", "empty", "Key found. Waiting for the first pull of sportsbook lines.")); return; }
+  box.append(el("div", "warn", "Sportsbook lines pulled " + ago(p.lines_ts) + (p.remaining ? " (" + p.remaining + " requests left this month)" : "") + ". They can be hours old. Re-check the line on the sportsbook before doing anything."));
+  const when = x => x.start ? new Date(x.start).toLocaleString() : "";
+  box.append(el("h2", "", "Best use of a bonus bet, per sportsbook")); 
+  if (!(p.bonus || []).length) box.append(el("div", "empty", "None found."));
+  (p.bonus || []).forEach(x => box.append(playRow(x.book + ": bonus on " + x.team + " at " + american(x.odds),
+    (100 * x.conversion).toFixed(0) + "% of bonus", x.game + ", " + when(x) + ". Hedge on " + x.hedge_site + ": " + x.hedge)));
+  box.append(el("h2", "", "Both sides covered (arbitrage)"));
+  if (!(p.arb || []).length) box.append(el("div", "empty", "None right now."));
+  (p.arb || []).forEach(x => box.append(playRow(x.book + ": " + x.team + " at " + american(x.odds),
+    (100 * x.roi).toFixed(1) + "% locked in", x.game + ", " + when(x) + ". Other side on " + x.hedge_site + ": " + x.hedge)));
+  box.append(el("h2", "", "Price better than the consensus (not guaranteed)"));
+  if (!(p.value || []).length) box.append(el("div", "empty", "None right now."));
+  (p.value || []).forEach(x => box.append(playRow(x.book + ": " + x.team + " at " + american(x.odds),
+    "+" + (100 * x.edge).toFixed(1) + "% expected", x.game + ", " + when(x) + ". Consensus chance " + (100 * x.fair).toFixed(1) + "%")));
+}
+function decimalOdds(s) {
+  s = String(s).trim().replace("\u2212", "-");
+  const n = parseFloat(s);
+  if (!isFinite(n)) return null;
+  if (s[0] === "+" || s[0] === "-" || Math.abs(n) >= 100) return n > 0 ? 1 + n / 100 : n < 0 ? 1 + 100 / -n : null;
+  return n > 1 ? n : null;                       // already decimal, e.g. 4.0
+}
+const american = d => d >= 2 ? "+" + Math.round((d - 1) * 100) : "-" + Math.round(100 / (d - 1));
+
+function hedgeNode(r, amt, d) {
+  const div = el("div", "opp"), top = el("div", "row");
+  const site = r.platform === "kalshi" ? "Kalshi" : "Polymarket";
+  const left = el("div"); left.append(el("span", "tag", site), document.createTextNode(" " + r.event + "  |  bonus on: " + r.on));
+  const unit = r.price + r.rate * r.price * (1 - r.price);         // cost of $1 of hedge payout
+  const win = amt * (d - 1), n = Math.round(win);
+  let fee = r.rate * n * r.price * (1 - r.price);
+  if (r.platform === "kalshi") fee = Math.ceil(fee * 100 - 1e-9) / 100;
+  const cost = n * r.price + fee, locked = Math.min(win - cost, n - cost);
+  const right = el("div", locked > 0 ? "money" : "", usd(locked) + "  (" + (100 * locked / amt).toFixed(0) + "% of bonus)");
+  top.append(left, right); div.append(top);
+  const line = el("div", "leg");
+  line.append(document.createTextNode(r.hedge + " at " + (r.price * 100).toFixed(1) + "\u00a2: " + n + " contracts, cost " + usd(cost) +
+    (r.size ? " (" + Math.floor(r.size) + " available at that price)" : "") + ". "));
+  const u = safeUrl(r.url);
+  if (u) { const a = el("a", "", "Open market"); a.href = u; a.target = "_blank"; a.rel = "noopener"; line.append(a); }
+  div.append(line);
+  const need = t => american(1 + t / (1 - unit));
+  div.append(el("div", "dim", "Sportsbook odds needed here for 70% conversion: " + need(0.7) + " or longer; for 80%: " + need(0.8) +
+    ". Settles " + new Date(r.close_ts * 1000).toLocaleString()));
+  if (locked > 0.9 * amt) div.append(el("div", "warn", "This only holds if the sportsbook really offers " + american(d) + " on exactly this outcome. A number this high usually means the odds you typed belong to a different row."));
+  if (r.size && n > r.size) div.append(el("div", "warn", "Not enough contracts at this price; the real cost will be higher."));
+  return div;
+}
+
+async function findHedge() {
+  const amt = parseFloat($("bAmt").value), d = decimalOdds($("bOdds").value), q = $("bQ").value.trim(), box = $("hedges");
+  box.replaceChildren();
+  if (!(amt > 0) || !d) { box.append(el("div", "warn", "Enter a bonus amount and odds like +300, -120 or 4.0.")); return; }
+  if (!q) { box.append(el("div", "empty", "Type a team or player name.")); return; }
+  let s;
+  try { s = await (await fetch("/api/hedge?q=" + encodeURIComponent(q))).json(); }
+  catch (e) { box.append(el("div", "warn", "Scanner not reachable.")); return; }
+  if (!s.rows.length) { box.append(el("div", "empty", "No live sports market matches that. Try fewer words.")); return; }
+  box.append(el("div", "dim", s.total + " matching markets, prices from " + ago(s.ts) + ". Pick the row whose outcome is the one your bonus bet is on."));
+  s.rows.forEach(r => box.append(hedgeNode(r, amt, d)));
+}
+$("bGo").onclick = findHedge;
+$("bQ").addEventListener("keydown", e => { if (e.key === "Enter") findHedge(); });
+load(); setInterval(load, 15000);
+</script>
+</body>
+</html>
